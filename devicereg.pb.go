@@ -12,6 +12,16 @@ It has these top-level messages:
 	ClaimDeviceResponse
 	RevokeDeviceRequest
 	RevokeDeviceResponse
+	Entitlement
+	CreateEntitlementPolicyRequest
+	CreateEntitlementPolicyResponse
+	DeleteEntitlementPolicyRequest
+	DeleteEntitlementPolicyResponse
+	ListEntitlementPoliciesRequest
+	ListEntitlementPoliciesResponse
+	EntitlementRequest
+	ApplyEntitlementResponse
+	RevokeEntitlementResponse
 */
 package devicereg
 
@@ -32,28 +42,56 @@ const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // An enumeration which allows us to express whether the device will be
 // located indoors or outdoors when deployed.
-type ClaimDeviceRequest_Disposition int32
+type ClaimDeviceRequest_Exposure int32
 
 const (
-	ClaimDeviceRequest_INDOOR  ClaimDeviceRequest_Disposition = 0
-	ClaimDeviceRequest_OUTDOOR ClaimDeviceRequest_Disposition = 1
+	ClaimDeviceRequest_INDOOR  ClaimDeviceRequest_Exposure = 0
+	ClaimDeviceRequest_OUTDOOR ClaimDeviceRequest_Exposure = 1
 )
 
-var ClaimDeviceRequest_Disposition_name = map[int32]string{
+var ClaimDeviceRequest_Exposure_name = map[int32]string{
 	0: "INDOOR",
 	1: "OUTDOOR",
 }
-var ClaimDeviceRequest_Disposition_value = map[string]int32{
+var ClaimDeviceRequest_Exposure_value = map[string]int32{
 	"INDOOR":  0,
 	"OUTDOOR": 1,
 }
 
-func (x ClaimDeviceRequest_Disposition) String() string {
-	return proto.EnumName(ClaimDeviceRequest_Disposition_name, int32(x))
+func (x ClaimDeviceRequest_Exposure) String() string {
+	return proto.EnumName(ClaimDeviceRequest_Exposure_name, int32(x))
 }
-func (ClaimDeviceRequest_Disposition) EnumDescriptor() ([]byte, []int) {
+func (ClaimDeviceRequest_Exposure) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor0, []int{0, 0}
 }
+
+// An enumeration which allows us to specify what type of sharing is to be
+// defined for the specified sensor type. The default value is `SHARE` which
+// implies sharing the data at full resolution. If this type is specified, it
+// is an error if either of `buckets` or `interval` is also supplied.
+type Entitlement_Action int32
+
+const (
+	Entitlement_SHARE      Entitlement_Action = 0
+	Entitlement_BIN        Entitlement_Action = 1
+	Entitlement_MOVING_AVG Entitlement_Action = 2
+)
+
+var Entitlement_Action_name = map[int32]string{
+	0: "SHARE",
+	1: "BIN",
+	2: "MOVING_AVG",
+}
+var Entitlement_Action_value = map[string]int32{
+	"SHARE":      0,
+	"BIN":        1,
+	"MOVING_AVG": 2,
+}
+
+func (x Entitlement_Action) String() string {
+	return proto.EnumName(Entitlement_Action_name, int32(x))
+}
+func (Entitlement_Action) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{4, 0} }
 
 // ClaimDeviceRequest is the message we send in order to initially claim that a
 // specific user owns a device. This message contains the device token (which
@@ -74,12 +112,12 @@ type ClaimDeviceRequest struct {
 	UserUid string `protobuf:"bytes,2,opt,name=user_uid,json=userUid" json:"user_uid,omitempty"`
 	// The location of the device to be claimed. This is a required field.
 	Location *ClaimDeviceRequest_Location `protobuf:"bytes,3,opt,name=location" json:"location,omitempty"`
-	// The specific disposition of the device, i.e. is this instance indoors or
+	// The specific exposure of the device, i.e. is this instance indoors or
 	// outdoors. If not specified the default value is INDOOR.
-	Disposition ClaimDeviceRequest_Disposition `protobuf:"varint,4,opt,name=disposition,enum=devicereg.ClaimDeviceRequest_Disposition" json:"disposition,omitempty"`
+	Exposure ClaimDeviceRequest_Exposure `protobuf:"varint,4,opt,name=exposure,enum=devicereg.ClaimDeviceRequest_Exposure" json:"exposure,omitempty"`
 	// The address of the MQTT broker to which the specified device is configured
 	// to publish data. This is a required field.
-	Broker string `protobuf:"bytes,5,opt,name=broker" json:"broker,omitempty"`
+	BrokerAddress string `protobuf:"bytes,5,opt,name=broker_address,json=brokerAddress" json:"broker_address,omitempty"`
 }
 
 func (m *ClaimDeviceRequest) Reset()                    { *m = ClaimDeviceRequest{} }
@@ -108,16 +146,16 @@ func (m *ClaimDeviceRequest) GetLocation() *ClaimDeviceRequest_Location {
 	return nil
 }
 
-func (m *ClaimDeviceRequest) GetDisposition() ClaimDeviceRequest_Disposition {
+func (m *ClaimDeviceRequest) GetExposure() ClaimDeviceRequest_Exposure {
 	if m != nil {
-		return m.Disposition
+		return m.Exposure
 	}
 	return ClaimDeviceRequest_INDOOR
 }
 
-func (m *ClaimDeviceRequest) GetBroker() string {
+func (m *ClaimDeviceRequest) GetBrokerAddress() string {
 	if m != nil {
-		return m.Broker
+		return m.BrokerAddress
 	}
 	return ""
 }
@@ -151,15 +189,17 @@ func (m *ClaimDeviceRequest_Location) GetLatitude() float64 {
 }
 
 // ClaimDeviceResponse is the message returned after successfully claiming a
-// device. We return here a key pair for the user, as well as a public key for
-// the device. The corresponding private key is used within the stream encoder
-// in order to encrypt data for the device.
+// device. We return here a key pair for the user, as well as the key pair for
+// the device. The private key is used within the stream encoder in order to
+// encrypt data for the device for specified recipients, but we also require the
+// client to present the private key in order to apply new entitlements to the
+// device.
 type ClaimDeviceResponse struct {
 	// The private part of a key pair for the individual user.
 	UserPrivateKey string `protobuf:"bytes,1,opt,name=user_private_key,json=userPrivateKey" json:"user_private_key,omitempty"`
 	// The public part of a key pair representing the individual user.
 	UserPublicKey string `protobuf:"bytes,2,opt,name=user_public_key,json=userPublicKey" json:"user_public_key,omitempty"`
-	// The public key for the device (TODO - is this useful for any reason?)
+	// The public part of a key pair applied to the device.
 	DevicePublicKey string `protobuf:"bytes,3,opt,name=device_public_key,json=devicePublicKey" json:"device_public_key,omitempty"`
 }
 
@@ -196,9 +236,9 @@ func (m *ClaimDeviceResponse) GetDevicePublicKey() string {
 type RevokeDeviceRequest struct {
 	// The unique token identifying the device.
 	DeviceToken string `protobuf:"bytes,1,opt,name=device_token,json=deviceToken" json:"device_token,omitempty"`
-	// The user's public key, serving here just to prove that the user actually is
+	// The user's private key, serving here just to prove that the user actually is
 	// the entity that previously claimed the device.
-	UserPublicKey string `protobuf:"bytes,2,opt,name=user_public_key,json=userPublicKey" json:"user_public_key,omitempty"`
+	UserPrivateKey string `protobuf:"bytes,2,opt,name=user_private_key,json=userPrivateKey" json:"user_private_key,omitempty"`
 }
 
 func (m *RevokeDeviceRequest) Reset()                    { *m = RevokeDeviceRequest{} }
@@ -213,9 +253,9 @@ func (m *RevokeDeviceRequest) GetDeviceToken() string {
 	return ""
 }
 
-func (m *RevokeDeviceRequest) GetUserPublicKey() string {
+func (m *RevokeDeviceRequest) GetUserPrivateKey() string {
 	if m != nil {
-		return m.UserPublicKey
+		return m.UserPrivateKey
 	}
 	return ""
 }
@@ -231,42 +271,447 @@ func (m *RevokeDeviceResponse) String() string            { return proto.Compact
 func (*RevokeDeviceResponse) ProtoMessage()               {}
 func (*RevokeDeviceResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
+// Entitlement is a message used to describe an operation that may be applied to
+// a specific data type published by a SmartCitizen device. The message contains
+// two required fields: the sensor_id (this is the type of data we are entitling
+// over), and a specified operation to be performed on that sensor type. This
+// can be one of three actions: to share the sensor without modification, to
+// apply a binning algorithm to the data so we output a bucketed value, or a
+// moving average calculated dynamically for incoming values.
+//
+// If an titlement specifies an Action type of `BIN`, then the optional
+// `buckets` parameter is required, similarly if an action type of `MOVING_AVG`
+// is specified, then `interval` is a required field.
+type Entitlement struct {
+	// The unique id of the sensor type for which this specific entitlement is
+	// defined. This is a required field.
+	SensorId uint32 `protobuf:"varint,1,opt,name=sensor_id,json=sensorId" json:"sensor_id,omitempty"`
+	// The specific action this entitlement defines for the sensor type. This is a
+	// required field.
+	Action Entitlement_Action `protobuf:"varint,2,opt,name=action,enum=devicereg.Entitlement_Action" json:"action,omitempty"`
+	// The bins attribute is used to specify the the bins into which incoming
+	// values should be classified. Each element in the list is the upper
+	// inclusive bound of a bin. The values submitted must be sorted in strictly
+	// increasing order. There is no need to add a highest bin with +Inf bound, it
+	// will be added implicitly. This field is optional unless an Action of `BIN`
+	// has been requested, in which case it is required. It is an error to send
+	// values for this attribute unless the value of Action is `BIN`.
+	Bins []float64 `protobuf:"fixed64,3,rep,packed,name=bins" json:"bins,omitempty"`
+	// This attribute is used to control the entitlement in the case for which we
+	// have specified an action type representing a moving average. It represents
+	// the interval in seconds over which the moving average should be calculated,
+	// e.g. for a 15 minute moving average the value supplied here would be 900.
+	// This field is optional unless an Action of `MOVING_AVG` has been specified,
+	// in which case it is required. It is an error to send a value for this
+	// attribute unless the value of Action is `MOVING_AVG`.
+	Interval uint32 `protobuf:"varint,4,opt,name=interval" json:"interval,omitempty"`
+}
+
+func (m *Entitlement) Reset()                    { *m = Entitlement{} }
+func (m *Entitlement) String() string            { return proto.CompactTextString(m) }
+func (*Entitlement) ProtoMessage()               {}
+func (*Entitlement) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
+
+func (m *Entitlement) GetSensorId() uint32 {
+	if m != nil {
+		return m.SensorId
+	}
+	return 0
+}
+
+func (m *Entitlement) GetAction() Entitlement_Action {
+	if m != nil {
+		return m.Action
+	}
+	return Entitlement_SHARE
+}
+
+func (m *Entitlement) GetBins() []float64 {
+	if m != nil {
+		return m.Bins
+	}
+	return nil
+}
+
+func (m *Entitlement) GetInterval() uint32 {
+	if m != nil {
+		return m.Interval
+	}
+	return 0
+}
+
+// CreateEntitlementPolicyRequest is a message sent to the device registration
+// service to create a new entitlement policy. An entitlement policy is a
+// collection of one or more "Entitlements". A single Entitlement specifies an
+// operation to be performed on a single data channel being published by a
+// SmartCitizen device. The policy as a whole is comprised of one or more
+// Entitlements.
+type CreateEntitlementPolicyRequest struct {
+	// The list of entitlements we wish to create for the policy. This field is
+	// required, and it is required that the client supplies at least one
+	// Entitlement.
+	Entitlements []*Entitlement `protobuf:"bytes,1,rep,name=entitlements" json:"entitlements,omitempty"`
+}
+
+func (m *CreateEntitlementPolicyRequest) Reset()                    { *m = CreateEntitlementPolicyRequest{} }
+func (m *CreateEntitlementPolicyRequest) String() string            { return proto.CompactTextString(m) }
+func (*CreateEntitlementPolicyRequest) ProtoMessage()               {}
+func (*CreateEntitlementPolicyRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
+
+func (m *CreateEntitlementPolicyRequest) GetEntitlements() []*Entitlement {
+	if m != nil {
+		return m.Entitlements
+	}
+	return nil
+}
+
+// CreateEntitlementPolicyResponse is a message returned by the service after a
+// policy has been created. On creating a policy the device registration service
+// also creates a key pair for the policy. The public part of this key pair will
+// be used by the encoder in order to encrypt data for the specified recipient.
+// In order to decrypt data at the other end, the private key must be
+// distributed to the recipient, and they will then be able to use this key to
+// decrypt the data. It is out of scope for this service to address how this key
+// is distributed to the correct recipient. The returned message below contains
+// a unique identifier of the policy allocated by the service, as well as the
+// newly created key pair.
+type CreateEntitlementPolicyResponse struct {
+	// This attribute contains a unique identifier for the policy that can be used
+	// for later requests to either apply a policy to a specific device, or to
+	// delete the policy and so prevent new instances being applied to devices.
+	PolicyId string `protobuf:"bytes,1,opt,name=policy_id,json=policyId" json:"policy_id,omitempty"`
+	// This attribute contains the private part of a key pair created by the
+	// registration service for the new policy.
+	PrivateKey string `protobuf:"bytes,2,opt,name=private_key,json=privateKey" json:"private_key,omitempty"`
+	// This attribute contains the public part of a key pair created by the
+	// registration service for the new policy.
+	PublicKey string `protobuf:"bytes,3,opt,name=public_key,json=publicKey" json:"public_key,omitempty"`
+}
+
+func (m *CreateEntitlementPolicyResponse) Reset()                    { *m = CreateEntitlementPolicyResponse{} }
+func (m *CreateEntitlementPolicyResponse) String() string            { return proto.CompactTextString(m) }
+func (*CreateEntitlementPolicyResponse) ProtoMessage()               {}
+func (*CreateEntitlementPolicyResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
+
+func (m *CreateEntitlementPolicyResponse) GetPolicyId() string {
+	if m != nil {
+		return m.PolicyId
+	}
+	return ""
+}
+
+func (m *CreateEntitlementPolicyResponse) GetPrivateKey() string {
+	if m != nil {
+		return m.PrivateKey
+	}
+	return ""
+}
+
+func (m *CreateEntitlementPolicyResponse) GetPublicKey() string {
+	if m != nil {
+		return m.PublicKey
+	}
+	return ""
+}
+
+// DeleteEntitlementPolicyRequest is a message that can be sent to the
+// registration service in order to delete an existing policy.
+//
+// Deleting a policy does not affect any already existing streams configured for
+// the policy, it just stops any new instances of this policy being applied to
+// other devices.
+type DeleteEntitlementPolicyRequest struct {
+	// This attribute contains the unique policy identifier returned when creating
+	// the policy.
+	PolicyId string `protobuf:"bytes,1,opt,name=policy_id,json=policyId" json:"policy_id,omitempty"`
+	// This attribute contains the private key previously created for the policy.
+	// This should be a secret only known to the creator, so prevents unauthorized
+	// clients from deleting other client's policies.
+	PrivateKey string `protobuf:"bytes,2,opt,name=private_key,json=privateKey" json:"private_key,omitempty"`
+}
+
+func (m *DeleteEntitlementPolicyRequest) Reset()                    { *m = DeleteEntitlementPolicyRequest{} }
+func (m *DeleteEntitlementPolicyRequest) String() string            { return proto.CompactTextString(m) }
+func (*DeleteEntitlementPolicyRequest) ProtoMessage()               {}
+func (*DeleteEntitlementPolicyRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
+
+func (m *DeleteEntitlementPolicyRequest) GetPolicyId() string {
+	if m != nil {
+		return m.PolicyId
+	}
+	return ""
+}
+
+func (m *DeleteEntitlementPolicyRequest) GetPrivateKey() string {
+	if m != nil {
+		return m.PrivateKey
+	}
+	return ""
+}
+
+// DeleteEntitlementPolicyResponse is a placeholder response returned from a
+// delete request. Currently empty, but reserved for any fields identified for
+// future iterations.
+type DeleteEntitlementPolicyResponse struct {
+}
+
+func (m *DeleteEntitlementPolicyResponse) Reset()                    { *m = DeleteEntitlementPolicyResponse{} }
+func (m *DeleteEntitlementPolicyResponse) String() string            { return proto.CompactTextString(m) }
+func (*DeleteEntitlementPolicyResponse) ProtoMessage()               {}
+func (*DeleteEntitlementPolicyResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
+
+// ListEntitlementPoliciesRequest is the message sent to the service in order to
+// receive a list of currently defined entitlement policies. Currently this
+// message is empty as we simply return a list of all known policies, but this
+// message may be extended should a need be identified to paginate through
+// policies, or apply any search or filtering techniques.
+type ListEntitlementPoliciesRequest struct {
+}
+
+func (m *ListEntitlementPoliciesRequest) Reset()                    { *m = ListEntitlementPoliciesRequest{} }
+func (m *ListEntitlementPoliciesRequest) String() string            { return proto.CompactTextString(m) }
+func (*ListEntitlementPoliciesRequest) ProtoMessage()               {}
+func (*ListEntitlementPoliciesRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{9} }
+
+// ListEntitlementPoliciesResponse is the response to the method call to list
+// policies. It simply returns a list of all currently registered and
+// non-deleted policies. This is intended to be able to be fed to the DECODE
+// wallet in order to allow participant to choose which entitlements to apply to
+// their devices.
+type ListEntitlementPoliciesResponse struct {
+	// This attribute contains the list of policies currently available on the
+	// device registration service.
+	Policies []*ListEntitlementPoliciesResponse_Policy `protobuf:"bytes,1,rep,name=policies" json:"policies,omitempty"`
+}
+
+func (m *ListEntitlementPoliciesResponse) Reset()         { *m = ListEntitlementPoliciesResponse{} }
+func (m *ListEntitlementPoliciesResponse) String() string { return proto.CompactTextString(m) }
+func (*ListEntitlementPoliciesResponse) ProtoMessage()    {}
+func (*ListEntitlementPoliciesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor0, []int{10}
+}
+
+func (m *ListEntitlementPoliciesResponse) GetPolicies() []*ListEntitlementPoliciesResponse_Policy {
+	if m != nil {
+		return m.Policies
+	}
+	return nil
+}
+
+// Policy is a nested type used to be able to cleanly return a list of
+// Policies within a single response. Each Policy instance contains the id of
+// the policy, the list of entitlements defined by the policy, as well as the
+// policy's public key.
+type ListEntitlementPoliciesResponse_Policy struct {
+	// This attribute contains the unique identifier of the policy.
+	PolicyId string `protobuf:"bytes,1,opt,name=policy_id,json=policyId" json:"policy_id,omitempty"`
+	// This field contains a list of the entitlements that define the policy.
+	Entitlements []*Entitlement `protobuf:"bytes,2,rep,name=entitlements" json:"entitlements,omitempty"`
+	// This attribute contains the public key of the policy. This public key
+	// attribute is the label applied to the bucket within the datastore which
+	// will be how data can be downloaded for the entitlement policy.
+	PublicKey string `protobuf:"bytes,3,opt,name=public_key,json=publicKey" json:"public_key,omitempty"`
+}
+
+func (m *ListEntitlementPoliciesResponse_Policy) Reset() {
+	*m = ListEntitlementPoliciesResponse_Policy{}
+}
+func (m *ListEntitlementPoliciesResponse_Policy) String() string { return proto.CompactTextString(m) }
+func (*ListEntitlementPoliciesResponse_Policy) ProtoMessage()    {}
+func (*ListEntitlementPoliciesResponse_Policy) Descriptor() ([]byte, []int) {
+	return fileDescriptor0, []int{10, 0}
+}
+
+func (m *ListEntitlementPoliciesResponse_Policy) GetPolicyId() string {
+	if m != nil {
+		return m.PolicyId
+	}
+	return ""
+}
+
+func (m *ListEntitlementPoliciesResponse_Policy) GetEntitlements() []*Entitlement {
+	if m != nil {
+		return m.Entitlements
+	}
+	return nil
+}
+
+func (m *ListEntitlementPoliciesResponse_Policy) GetPublicKey() string {
+	if m != nil {
+		return m.PublicKey
+	}
+	return ""
+}
+
+// EntitlementRequest is a message type we define which allows a user with a
+// claimed device to apply or revoke one or more entitlement policies to a
+// device. The attributes defined within the request are the device_token which
+// should be stored within the user's wallet, the private key associated with
+// the device which only the claiming user should know (again should be in the
+// wallet), and a list of entitlement policy ids. On receiving this message the
+// service must validate the device attributes to ensure the user has rights to
+// create the streams, and then for each specified policy id we should check it
+// still represents a valid policy. If both of these attributes are valid, the
+// device registration service must then make calls to the stream encoder to
+// either create or delete the appropriate streams. If any operation fails, the
+// service should return an error but will not have changed any local state.
+type EntitlementRequest struct {
+	// This attribute contains the identifying token of the device as defined by
+	// SmartCitizen. This is a required field.
+	DeviceToken string `protobuf:"bytes,1,opt,name=device_token,json=deviceToken" json:"device_token,omitempty"`
+	// This attribute contains the private key for the user previously generated
+	// by the device registration service. If this does not match with the user
+	// who has claimed the device, then this request will be viewed as invalid.
+	// This is a required field.
+	UserPrivateKey string `protobuf:"bytes,2,opt,name=user_private_key,json=userPrivateKey" json:"user_private_key,omitempty"`
+	// This attribute contains a list of one or more policy ids which the caller
+	// is requesting by applied to their device. This list must have 1 or more
+	// elements. If any of the ids specified in this list are not valid the service
+	// will return an error and not create any of the specified streams.
+	PolicyIds []string `protobuf:"bytes,3,rep,name=policy_ids,json=policyIds" json:"policy_ids,omitempty"`
+}
+
+func (m *EntitlementRequest) Reset()                    { *m = EntitlementRequest{} }
+func (m *EntitlementRequest) String() string            { return proto.CompactTextString(m) }
+func (*EntitlementRequest) ProtoMessage()               {}
+func (*EntitlementRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{11} }
+
+func (m *EntitlementRequest) GetDeviceToken() string {
+	if m != nil {
+		return m.DeviceToken
+	}
+	return ""
+}
+
+func (m *EntitlementRequest) GetUserPrivateKey() string {
+	if m != nil {
+		return m.UserPrivateKey
+	}
+	return ""
+}
+
+func (m *EntitlementRequest) GetPolicyIds() []string {
+	if m != nil {
+		return m.PolicyIds
+	}
+	return nil
+}
+
+// ApplyEntitlementResponse is a placeholder message type returned from a call
+// where we apply entitlements to a device.
+type ApplyEntitlementResponse struct {
+	// This attribute contains the identifying token of the device as defined by
+	// SmartCitizen. This is a required field.
+	DeviceToken string `protobuf:"bytes,1,opt,name=device_token,json=deviceToken" json:"device_token,omitempty"`
+	// This attribute returns a list of the policy ids that have just been applied
+	// to the device.
+	PolicyIds []string `protobuf:"bytes,2,rep,name=policy_ids,json=policyIds" json:"policy_ids,omitempty"`
+}
+
+func (m *ApplyEntitlementResponse) Reset()                    { *m = ApplyEntitlementResponse{} }
+func (m *ApplyEntitlementResponse) String() string            { return proto.CompactTextString(m) }
+func (*ApplyEntitlementResponse) ProtoMessage()               {}
+func (*ApplyEntitlementResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{12} }
+
+func (m *ApplyEntitlementResponse) GetDeviceToken() string {
+	if m != nil {
+		return m.DeviceToken
+	}
+	return ""
+}
+
+func (m *ApplyEntitlementResponse) GetPolicyIds() []string {
+	if m != nil {
+		return m.PolicyIds
+	}
+	return nil
+}
+
+// RevokeEntitlementResponse is a placeholder message type returned from a call
+// where we revoke entitlements from a device. Currently it has no attributes
+// but is kept as a separate type to allow for future extensions.
+type RevokeEntitlementResponse struct {
+}
+
+func (m *RevokeEntitlementResponse) Reset()                    { *m = RevokeEntitlementResponse{} }
+func (m *RevokeEntitlementResponse) String() string            { return proto.CompactTextString(m) }
+func (*RevokeEntitlementResponse) ProtoMessage()               {}
+func (*RevokeEntitlementResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{13} }
+
 func init() {
 	proto.RegisterType((*ClaimDeviceRequest)(nil), "devicereg.ClaimDeviceRequest")
 	proto.RegisterType((*ClaimDeviceRequest_Location)(nil), "devicereg.ClaimDeviceRequest.Location")
 	proto.RegisterType((*ClaimDeviceResponse)(nil), "devicereg.ClaimDeviceResponse")
 	proto.RegisterType((*RevokeDeviceRequest)(nil), "devicereg.RevokeDeviceRequest")
 	proto.RegisterType((*RevokeDeviceResponse)(nil), "devicereg.RevokeDeviceResponse")
-	proto.RegisterEnum("devicereg.ClaimDeviceRequest_Disposition", ClaimDeviceRequest_Disposition_name, ClaimDeviceRequest_Disposition_value)
+	proto.RegisterType((*Entitlement)(nil), "devicereg.Entitlement")
+	proto.RegisterType((*CreateEntitlementPolicyRequest)(nil), "devicereg.CreateEntitlementPolicyRequest")
+	proto.RegisterType((*CreateEntitlementPolicyResponse)(nil), "devicereg.CreateEntitlementPolicyResponse")
+	proto.RegisterType((*DeleteEntitlementPolicyRequest)(nil), "devicereg.DeleteEntitlementPolicyRequest")
+	proto.RegisterType((*DeleteEntitlementPolicyResponse)(nil), "devicereg.DeleteEntitlementPolicyResponse")
+	proto.RegisterType((*ListEntitlementPoliciesRequest)(nil), "devicereg.ListEntitlementPoliciesRequest")
+	proto.RegisterType((*ListEntitlementPoliciesResponse)(nil), "devicereg.ListEntitlementPoliciesResponse")
+	proto.RegisterType((*ListEntitlementPoliciesResponse_Policy)(nil), "devicereg.ListEntitlementPoliciesResponse.Policy")
+	proto.RegisterType((*EntitlementRequest)(nil), "devicereg.EntitlementRequest")
+	proto.RegisterType((*ApplyEntitlementResponse)(nil), "devicereg.ApplyEntitlementResponse")
+	proto.RegisterType((*RevokeEntitlementResponse)(nil), "devicereg.RevokeEntitlementResponse")
+	proto.RegisterEnum("devicereg.ClaimDeviceRequest_Exposure", ClaimDeviceRequest_Exposure_name, ClaimDeviceRequest_Exposure_value)
+	proto.RegisterEnum("devicereg.Entitlement_Action", Entitlement_Action_name, Entitlement_Action_value)
 }
 
 func init() { proto.RegisterFile("devicereg.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 396 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0x4f, 0xee, 0xd2, 0x40,
-	0x14, 0xc7, 0x1d, 0x50, 0x28, 0xaf, 0x08, 0xf8, 0x30, 0xa4, 0x36, 0xfe, 0xc1, 0x2e, 0x48, 0x75,
-	0xc1, 0x02, 0x6f, 0x80, 0xdd, 0x18, 0x88, 0x35, 0x0d, 0x6c, 0xdc, 0x60, 0xa1, 0x13, 0x32, 0x69,
-	0xed, 0xd4, 0x76, 0x4a, 0xc2, 0x39, 0x3c, 0x8a, 0xa7, 0xf2, 0x16, 0xa6, 0x33, 0xa5, 0x2d, 0x51,
-	0x88, 0xbf, 0xe5, 0xfb, 0xbe, 0xcf, 0xfb, 0x3f, 0x03, 0xc3, 0x80, 0x9e, 0xd8, 0x81, 0xa6, 0xf4,
-	0x38, 0x4f, 0x52, 0x2e, 0x38, 0xf6, 0x2a, 0xc1, 0xfa, 0xdd, 0x02, 0xfc, 0x18, 0xf9, 0xec, 0xbb,
-	0x23, 0x25, 0x8f, 0xfe, 0xc8, 0x69, 0x26, 0xf0, 0x2d, 0xf4, 0x15, 0xb3, 0x13, 0x3c, 0xa4, 0xb1,
-	0x41, 0xa6, 0xc4, 0xee, 0x79, 0xba, 0xd2, 0x36, 0x85, 0x84, 0x2f, 0x40, 0xcb, 0x33, 0x9a, 0xee,
-	0x72, 0x16, 0x18, 0x2d, 0xe9, 0xee, 0x16, 0xf6, 0x96, 0x05, 0xb8, 0x04, 0x2d, 0xe2, 0x07, 0x5f,
-	0x30, 0x1e, 0x1b, 0xed, 0x29, 0xb1, 0xf5, 0xc5, 0x6c, 0x5e, 0xf7, 0xf0, 0x77, 0xb9, 0xf9, 0xba,
-	0xa4, 0xbd, 0x2a, 0x0e, 0x57, 0xa0, 0x07, 0x2c, 0x4b, 0x78, 0xc6, 0x64, 0x9a, 0xc7, 0x53, 0x62,
-	0x0f, 0x16, 0xef, 0xee, 0xa7, 0x71, 0xea, 0x00, 0xaf, 0x19, 0x8d, 0x13, 0xe8, 0xec, 0x53, 0x1e,
-	0xd2, 0xd4, 0x78, 0x22, 0x3b, 0x2d, 0x2d, 0xd3, 0x01, 0xed, 0x52, 0x1a, 0x5f, 0x42, 0x2f, 0xe2,
-	0xf1, 0x91, 0x89, 0x3c, 0xa0, 0x72, 0x5e, 0xe2, 0xd5, 0x02, 0x9a, 0xa0, 0x45, 0xbe, 0x50, 0xce,
-	0x96, 0x74, 0x56, 0xb6, 0x35, 0x03, 0xbd, 0x51, 0x19, 0x01, 0x3a, 0x9f, 0x3e, 0x3b, 0xae, 0xeb,
-	0x8d, 0x1e, 0xa1, 0x0e, 0x5d, 0x77, 0xbb, 0x91, 0x06, 0xb1, 0x7e, 0x12, 0x18, 0x5f, 0x75, 0x9d,
-	0x25, 0x3c, 0xce, 0x28, 0xda, 0x30, 0x92, 0x9b, 0x4c, 0x52, 0x76, 0xf2, 0x05, 0xdd, 0x85, 0xf4,
-	0x5c, 0x2e, 0x7c, 0x50, 0xe8, 0x5f, 0x94, 0xbc, 0xa2, 0x67, 0x9c, 0xc1, 0x50, 0x91, 0xf9, 0x3e,
-	0x62, 0x07, 0x09, 0xaa, 0xd5, 0x3f, 0x95, 0xa0, 0x54, 0x0b, 0xee, 0x3d, 0x3c, 0x2b, 0xcf, 0xd7,
-	0x20, 0xdb, 0x92, 0x2c, 0x1f, 0x43, 0xc5, 0x5a, 0xdf, 0x60, 0xec, 0xd1, 0x13, 0x0f, 0xe9, 0x83,
-	0x5f, 0xc0, 0x7f, 0x76, 0x63, 0x4d, 0xe0, 0xf9, 0x75, 0x05, 0x35, 0xf7, 0xe2, 0x17, 0x01, 0xbc,
-	0x48, 0x47, 0x96, 0x89, 0x54, 0x1d, 0x62, 0x0d, 0x7a, 0x63, 0x4b, 0xf8, 0xea, 0xee, 0xcd, 0xcd,
-	0xd7, 0xb7, 0xdc, 0xe5, 0x72, 0x5d, 0xe8, 0x37, 0x8b, 0x63, 0x93, 0xff, 0xc7, 0xdc, 0xe6, 0x9b,
-	0x9b, 0x7e, 0x95, 0x70, 0xa9, 0x7f, 0xad, 0xbf, 0xcf, 0xbe, 0x23, 0x3f, 0xd4, 0x87, 0x3f, 0x01,
-	0x00, 0x00, 0xff, 0xff, 0x83, 0x06, 0x8d, 0x23, 0x63, 0x03, 0x00, 0x00,
+	// 803 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0xc1, 0x4e, 0xdb, 0x4a,
+	0x14, 0xc5, 0x0e, 0x84, 0xf8, 0x9a, 0x84, 0x30, 0x3c, 0xf1, 0x4c, 0x78, 0x24, 0xc1, 0xbc, 0x87,
+	0xf2, 0x50, 0x15, 0xa9, 0x54, 0xdd, 0x74, 0x17, 0x08, 0xa2, 0x51, 0x81, 0x20, 0x17, 0x50, 0x55,
+	0xa1, 0x46, 0x4e, 0x3c, 0x42, 0xa3, 0x18, 0xdb, 0xb5, 0x9d, 0xa8, 0xd9, 0x54, 0xfc, 0x43, 0x3f,
+	0xa7, 0x8b, 0xfe, 0x50, 0x77, 0xfd, 0x81, 0xca, 0x33, 0x63, 0xc7, 0x4e, 0xe2, 0x84, 0xaa, 0xea,
+	0x2e, 0x73, 0xe7, 0xcc, 0xb9, 0x67, 0xee, 0x3d, 0x77, 0x62, 0x58, 0x37, 0xf0, 0x90, 0xf4, 0xb0,
+	0x8b, 0xef, 0xeb, 0x8e, 0x6b, 0xfb, 0x36, 0x92, 0xa2, 0x80, 0xfa, 0x5d, 0x04, 0x74, 0x62, 0xea,
+	0xe4, 0xa1, 0x49, 0x43, 0x1a, 0xfe, 0x38, 0xc0, 0x9e, 0x8f, 0xf6, 0x60, 0x8d, 0x61, 0x3a, 0xbe,
+	0xdd, 0xc7, 0x96, 0x22, 0x54, 0x85, 0x9a, 0xa4, 0xc9, 0x2c, 0x76, 0x1d, 0x84, 0xd0, 0x36, 0xe4,
+	0x06, 0x1e, 0x76, 0x3b, 0x03, 0x62, 0x28, 0x22, 0xdd, 0x5e, 0x0d, 0xd6, 0x37, 0xc4, 0x40, 0xc7,
+	0x90, 0x33, 0xed, 0x9e, 0xee, 0x13, 0xdb, 0x52, 0x32, 0x55, 0xa1, 0x26, 0x1f, 0x1d, 0xd4, 0xc7,
+	0x1a, 0xa6, 0xd3, 0xd5, 0xcf, 0x39, 0x5a, 0x8b, 0xce, 0x05, 0x1c, 0xf8, 0x93, 0x63, 0x7b, 0x03,
+	0x17, 0x2b, 0xcb, 0x55, 0xa1, 0x56, 0x58, 0xc4, 0x71, 0xca, 0xd1, 0x5a, 0x74, 0x0e, 0xfd, 0x07,
+	0x85, 0xae, 0x6b, 0xf7, 0xb1, 0xdb, 0xd1, 0x0d, 0xc3, 0xc5, 0x9e, 0xa7, 0xac, 0x50, 0xa1, 0x79,
+	0x16, 0x6d, 0xb0, 0x60, 0xa9, 0x09, 0xb9, 0x50, 0x00, 0xfa, 0x07, 0x24, 0xd3, 0xb6, 0xee, 0x89,
+	0x3f, 0x30, 0x30, 0xbd, 0xb5, 0xa0, 0x8d, 0x03, 0xa8, 0x04, 0x39, 0x53, 0xf7, 0xd9, 0xa6, 0x48,
+	0x37, 0xa3, 0xb5, 0xba, 0x0f, 0xb9, 0x50, 0x02, 0x02, 0xc8, 0xb6, 0x2e, 0x9b, 0xed, 0xb6, 0x56,
+	0x5c, 0x42, 0x32, 0xac, 0xb6, 0x6f, 0xae, 0xe9, 0x42, 0x50, 0xbf, 0x08, 0xb0, 0x99, 0xd0, 0xee,
+	0x39, 0xb6, 0xe5, 0x61, 0x54, 0x83, 0x22, 0x2d, 0xa6, 0xe3, 0x92, 0xa1, 0xee, 0xe3, 0x4e, 0x1f,
+	0x8f, 0x78, 0xcd, 0x0b, 0x41, 0xfc, 0x8a, 0x85, 0xdf, 0xe0, 0x11, 0x3a, 0x80, 0x75, 0x86, 0x1c,
+	0x74, 0x4d, 0xd2, 0xa3, 0x40, 0x56, 0xfd, 0x3c, 0x05, 0xd2, 0x68, 0x80, 0x3b, 0x84, 0x0d, 0xde,
+	0xc1, 0x18, 0x32, 0x43, 0x91, 0xdc, 0x0f, 0x11, 0x56, 0xed, 0xc2, 0xa6, 0x86, 0x87, 0x76, 0x1f,
+	0xff, 0xb2, 0x09, 0x66, 0xe9, 0x16, 0x67, 0xe9, 0x56, 0xb7, 0xe0, 0xaf, 0x64, 0x0e, 0x76, 0x73,
+	0xf5, 0x9b, 0x00, 0xf2, 0xa9, 0xe5, 0x13, 0xdf, 0xc4, 0x0f, 0xd8, 0xf2, 0xd1, 0x0e, 0x48, 0x1e,
+	0xb6, 0x3c, 0xdb, 0xed, 0x10, 0x83, 0x66, 0xcc, 0x6b, 0x39, 0x16, 0x68, 0x19, 0xe8, 0x25, 0x64,
+	0xf5, 0x1e, 0xb5, 0x95, 0x48, 0x2d, 0xb1, 0x1b, 0xb3, 0x44, 0x8c, 0xa4, 0xde, 0xa0, 0x20, 0x8d,
+	0x83, 0x11, 0x82, 0xe5, 0x2e, 0xb1, 0x3c, 0x25, 0x53, 0xcd, 0xd4, 0x04, 0x8d, 0xfe, 0x0e, 0x5a,
+	0x49, 0x2c, 0x1f, 0xbb, 0x43, 0xdd, 0xa4, 0xfe, 0xca, 0x6b, 0xd1, 0x5a, 0x7d, 0x06, 0x59, 0xc6,
+	0x80, 0x24, 0x58, 0x79, 0xfb, 0xba, 0xa1, 0x9d, 0x16, 0x97, 0xd0, 0x2a, 0x64, 0x8e, 0x5b, 0x97,
+	0x45, 0x01, 0x15, 0x00, 0x2e, 0xda, 0xb7, 0xad, 0xcb, 0xb3, 0x4e, 0xe3, 0xf6, 0xac, 0x28, 0xaa,
+	0x77, 0x50, 0x3e, 0x71, 0xb1, 0xee, 0xe3, 0x98, 0x82, 0x2b, 0xdb, 0x24, 0xbd, 0x51, 0x58, 0xc8,
+	0x57, 0xb0, 0x86, 0xc7, 0x7b, 0x9e, 0x22, 0x54, 0x33, 0x35, 0xf9, 0x68, 0x6b, 0xb6, 0x78, 0x2d,
+	0x81, 0x55, 0x3f, 0x43, 0x25, 0x95, 0x9d, 0x9b, 0x67, 0x07, 0x24, 0x87, 0x46, 0xc2, 0x92, 0x49,
+	0x5a, 0x8e, 0x05, 0x5a, 0x06, 0xaa, 0x80, 0x3c, 0xdd, 0x1c, 0x70, 0xc6, 0x86, 0xda, 0x05, 0x98,
+	0x72, 0x88, 0xe4, 0x44, 0xde, 0xf8, 0x00, 0xe5, 0x26, 0x36, 0xf1, 0x9c, 0xdb, 0xfd, 0x56, 0x7a,
+	0x75, 0x0f, 0x2a, 0xa9, 0xfc, 0xdc, 0x22, 0x55, 0x28, 0x9f, 0x13, 0xcf, 0x9f, 0x04, 0x10, 0xec,
+	0x71, 0x09, 0xea, 0x0f, 0x01, 0x2a, 0xa9, 0x10, 0x5e, 0xa5, 0x0b, 0x60, 0xaa, 0x08, 0x0e, 0x1b,
+	0xf0, 0x3c, 0xd6, 0x80, 0x05, 0xa7, 0xeb, 0x5c, 0x52, 0x44, 0x51, 0x7a, 0x14, 0x20, 0xcb, 0x82,
+	0xf3, 0x0b, 0x30, 0xd9, 0x7b, 0xf1, 0xe9, 0xbd, 0x5f, 0xd4, 0x9a, 0x47, 0x01, 0x50, 0xfc, 0xf0,
+	0x1f, 0x18, 0x5b, 0x2a, 0x21, 0xbc, 0x1b, 0x1b, 0xa0, 0x40, 0x02, 0xbf, 0x9c, 0xa7, 0xde, 0x81,
+	0xd2, 0x70, 0x1c, 0x73, 0x94, 0x90, 0xc1, 0x0b, 0xfe, 0x04, 0x1d, 0x49, 0x76, 0x71, 0x92, 0x7d,
+	0x07, 0xb6, 0xd9, 0x9b, 0x31, 0x83, 0xfe, 0xe8, 0xeb, 0x0a, 0xa0, 0xf0, 0x2d, 0xb9, 0x27, 0x9e,
+	0xef, 0xb2, 0x07, 0xfc, 0x1c, 0xe4, 0xd8, 0x03, 0x8b, 0x76, 0xe7, 0xfe, 0x69, 0x94, 0xca, 0x69,
+	0xdb, 0xfc, 0x0e, 0x6d, 0x58, 0x8b, 0xbf, 0x5a, 0x28, 0x8e, 0x9f, 0xf1, 0x64, 0x96, 0x2a, 0xa9,
+	0xfb, 0x9c, 0xd0, 0x81, 0xbf, 0x53, 0xc6, 0x19, 0xfd, 0x1f, 0xd7, 0x32, 0xf7, 0x41, 0x29, 0x1d,
+	0x3e, 0x05, 0x3a, 0xce, 0x98, 0x32, 0x60, 0x89, 0x8c, 0xf3, 0x87, 0x3c, 0x91, 0x71, 0xc1, 0xbc,
+	0x06, 0x19, 0x53, 0xc6, 0x29, 0x91, 0x71, 0xfe, 0x4c, 0x27, 0x32, 0x2e, 0x9a, 0xed, 0x5b, 0x28,
+	0x4e, 0xda, 0x10, 0xa5, 0xfc, 0x37, 0x84, 0xf4, 0xfb, 0xb1, 0xed, 0x54, 0x0b, 0xbf, 0x83, 0x8d,
+	0x29, 0x03, 0x2e, 0x22, 0xfe, 0x77, 0xca, 0x02, 0x33, 0x98, 0x8f, 0xe5, 0xf7, 0xe3, 0x8f, 0xb0,
+	0x6e, 0x96, 0x7e, 0x96, 0xbd, 0xf8, 0x19, 0x00, 0x00, 0xff, 0xff, 0xa0, 0x0a, 0x1a, 0x8a, 0xa9,
+	0x09, 0x00, 0x00,
 }

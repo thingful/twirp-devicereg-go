@@ -52,6 +52,44 @@ type DeviceRegistration interface {
 	// the device registration service, which must also delete all streams by
 	// calling down to the stream encoder.
 	RevokeDevice(context.Context, *RevokeDeviceRequest) (*RevokeDeviceResponse, error)
+
+	// CreateEntitlementPolicy is a method exposed by the service which allows a
+	// new entitlement policy to be created and stored within the device
+	// registration service. Once a policy has been created, users will then be
+	// able to apply this policy to their devices via the wallet.
+	CreateEntitlementPolicy(context.Context, *CreateEntitlementPolicyRequest) (*CreateEntitlementPolicyResponse, error)
+
+	// DeleteEntitlementPolicy is a method exposed by the service which allows an
+	// authorized client to request that an entitlement policy be deleted.
+	// Deleting a policy will not affect any existing devices that have already
+	// used the policy in order to create one or more streams within the encoder,
+	// however it will prevent any new applications of that policy to other
+	// devices.
+	DeleteEntitlementPolicy(context.Context, *DeleteEntitlementPolicyRequest) (*DeleteEntitlementPolicyResponse, error)
+
+	// ListEntitlementPolicies is a method exposed by the service which returns a
+	// list of all policies currently defined and available within the service to
+	// be applied to devices. Currently it just returns a list of all known
+	// policies with no capability to filter or paginate these policies.
+	ListEntitlementPolicies(context.Context, *ListEntitlementPoliciesRequest) (*ListEntitlementPoliciesResponse, error)
+
+	// ApplyEntitlement is a method exposed by the service which allows a user who
+	// has previously claimed a device to apply specific entitlement policies to
+	// their device. Applying a policy to a device sets up a new stream on the
+	// stream encoder with the filtering or aggregation functions defined in the
+	// policy applied to incoming events. This will result in the stream encoder
+	// encrypting and emitting the processed events to the datastore for the
+	// specified policy. Note we send the same request message for both this and
+	// RevokeEntitlement as the data sent is exactly the same.
+	ApplyEntitlement(context.Context, *EntitlementRequest) (*ApplyEntitlementResponse, error)
+
+	// RevokeEntitlement is a method exposed by the service which allows a user
+	// who has previously claimed a device to revoke specific entitlement policies
+	// from their device. Revoking a policy from a device causes the service to
+	// delete associated streams meaning data will no longer be encrypted and sent
+	// to the datastore. Note we send the same request message for both this and
+	// ApplyEntitlement as the data sent is exactly the same.
+	RevokeEntitlement(context.Context, *EntitlementRequest) (*RevokeEntitlementResponse, error)
 }
 
 // ==================================
@@ -60,16 +98,21 @@ type DeviceRegistration interface {
 
 type deviceRegistrationProtobufClient struct {
 	client HTTPClient
-	urls   [2]string
+	urls   [7]string
 }
 
 // NewDeviceRegistrationProtobufClient creates a Protobuf client that implements the DeviceRegistration interface.
 // It communicates using Protobuf and can be configured with a custom HTTPClient.
 func NewDeviceRegistrationProtobufClient(addr string, client HTTPClient) DeviceRegistration {
 	prefix := urlBase(addr) + DeviceRegistrationPathPrefix
-	urls := [2]string{
+	urls := [7]string{
 		prefix + "ClaimDevice",
 		prefix + "RevokeDevice",
+		prefix + "CreateEntitlementPolicy",
+		prefix + "DeleteEntitlementPolicy",
+		prefix + "ListEntitlementPolicies",
+		prefix + "ApplyEntitlement",
+		prefix + "RevokeEntitlement",
 	}
 	if httpClient, ok := client.(*http.Client); ok {
 		return &deviceRegistrationProtobufClient{
@@ -101,22 +144,72 @@ func (c *deviceRegistrationProtobufClient) RevokeDevice(ctx context.Context, in 
 	return out, err
 }
 
+func (c *deviceRegistrationProtobufClient) CreateEntitlementPolicy(ctx context.Context, in *CreateEntitlementPolicyRequest) (*CreateEntitlementPolicyResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "CreateEntitlementPolicy")
+	out := new(CreateEntitlementPolicyResponse)
+	err := doProtobufRequest(ctx, c.client, c.urls[2], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationProtobufClient) DeleteEntitlementPolicy(ctx context.Context, in *DeleteEntitlementPolicyRequest) (*DeleteEntitlementPolicyResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "DeleteEntitlementPolicy")
+	out := new(DeleteEntitlementPolicyResponse)
+	err := doProtobufRequest(ctx, c.client, c.urls[3], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationProtobufClient) ListEntitlementPolicies(ctx context.Context, in *ListEntitlementPoliciesRequest) (*ListEntitlementPoliciesResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "ListEntitlementPolicies")
+	out := new(ListEntitlementPoliciesResponse)
+	err := doProtobufRequest(ctx, c.client, c.urls[4], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationProtobufClient) ApplyEntitlement(ctx context.Context, in *EntitlementRequest) (*ApplyEntitlementResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "ApplyEntitlement")
+	out := new(ApplyEntitlementResponse)
+	err := doProtobufRequest(ctx, c.client, c.urls[5], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationProtobufClient) RevokeEntitlement(ctx context.Context, in *EntitlementRequest) (*RevokeEntitlementResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "RevokeEntitlement")
+	out := new(RevokeEntitlementResponse)
+	err := doProtobufRequest(ctx, c.client, c.urls[6], in, out)
+	return out, err
+}
+
 // ==============================
 // DeviceRegistration JSON Client
 // ==============================
 
 type deviceRegistrationJSONClient struct {
 	client HTTPClient
-	urls   [2]string
+	urls   [7]string
 }
 
 // NewDeviceRegistrationJSONClient creates a JSON client that implements the DeviceRegistration interface.
 // It communicates using JSON and can be configured with a custom HTTPClient.
 func NewDeviceRegistrationJSONClient(addr string, client HTTPClient) DeviceRegistration {
 	prefix := urlBase(addr) + DeviceRegistrationPathPrefix
-	urls := [2]string{
+	urls := [7]string{
 		prefix + "ClaimDevice",
 		prefix + "RevokeDevice",
+		prefix + "CreateEntitlementPolicy",
+		prefix + "DeleteEntitlementPolicy",
+		prefix + "ListEntitlementPolicies",
+		prefix + "ApplyEntitlement",
+		prefix + "RevokeEntitlement",
 	}
 	if httpClient, ok := client.(*http.Client); ok {
 		return &deviceRegistrationJSONClient{
@@ -145,6 +238,51 @@ func (c *deviceRegistrationJSONClient) RevokeDevice(ctx context.Context, in *Rev
 	ctx = ctxsetters.WithMethodName(ctx, "RevokeDevice")
 	out := new(RevokeDeviceResponse)
 	err := doJSONRequest(ctx, c.client, c.urls[1], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationJSONClient) CreateEntitlementPolicy(ctx context.Context, in *CreateEntitlementPolicyRequest) (*CreateEntitlementPolicyResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "CreateEntitlementPolicy")
+	out := new(CreateEntitlementPolicyResponse)
+	err := doJSONRequest(ctx, c.client, c.urls[2], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationJSONClient) DeleteEntitlementPolicy(ctx context.Context, in *DeleteEntitlementPolicyRequest) (*DeleteEntitlementPolicyResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "DeleteEntitlementPolicy")
+	out := new(DeleteEntitlementPolicyResponse)
+	err := doJSONRequest(ctx, c.client, c.urls[3], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationJSONClient) ListEntitlementPolicies(ctx context.Context, in *ListEntitlementPoliciesRequest) (*ListEntitlementPoliciesResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "ListEntitlementPolicies")
+	out := new(ListEntitlementPoliciesResponse)
+	err := doJSONRequest(ctx, c.client, c.urls[4], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationJSONClient) ApplyEntitlement(ctx context.Context, in *EntitlementRequest) (*ApplyEntitlementResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "ApplyEntitlement")
+	out := new(ApplyEntitlementResponse)
+	err := doJSONRequest(ctx, c.client, c.urls[5], in, out)
+	return out, err
+}
+
+func (c *deviceRegistrationJSONClient) RevokeEntitlement(ctx context.Context, in *EntitlementRequest) (*RevokeEntitlementResponse, error) {
+	ctx = ctxsetters.WithPackageName(ctx, "devicereg")
+	ctx = ctxsetters.WithServiceName(ctx, "DeviceRegistration")
+	ctx = ctxsetters.WithMethodName(ctx, "RevokeEntitlement")
+	out := new(RevokeEntitlementResponse)
+	err := doJSONRequest(ctx, c.client, c.urls[6], in, out)
 	return out, err
 }
 
@@ -201,6 +339,21 @@ func (s *deviceRegistrationServer) ServeHTTP(resp http.ResponseWriter, req *http
 		return
 	case "/twirp/devicereg.DeviceRegistration/RevokeDevice":
 		s.serveRevokeDevice(ctx, resp, req)
+		return
+	case "/twirp/devicereg.DeviceRegistration/CreateEntitlementPolicy":
+		s.serveCreateEntitlementPolicy(ctx, resp, req)
+		return
+	case "/twirp/devicereg.DeviceRegistration/DeleteEntitlementPolicy":
+		s.serveDeleteEntitlementPolicy(ctx, resp, req)
+		return
+	case "/twirp/devicereg.DeviceRegistration/ListEntitlementPolicies":
+		s.serveListEntitlementPolicies(ctx, resp, req)
+		return
+	case "/twirp/devicereg.DeviceRegistration/ApplyEntitlement":
+		s.serveApplyEntitlement(ctx, resp, req)
+		return
+	case "/twirp/devicereg.DeviceRegistration/RevokeEntitlement":
+		s.serveRevokeEntitlement(ctx, resp, req)
 		return
 	default:
 		msg := fmt.Sprintf("no handler for path %q", req.URL.Path)
@@ -475,6 +628,726 @@ func (s *deviceRegistrationServer) serveRevokeDeviceProtobuf(ctx context.Context
 	}
 	if respContent == nil {
 		s.writeError(ctx, resp, twirp.InternalError("received a nil *RevokeDeviceResponse and nil error while calling RevokeDevice. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		err = wrapErr(err, "failed to marshal proto response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveCreateEntitlementPolicy(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveCreateEntitlementPolicyJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveCreateEntitlementPolicyProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *deviceRegistrationServer) serveCreateEntitlementPolicyJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "CreateEntitlementPolicy")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	reqContent := new(CreateEntitlementPolicyRequest)
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	if err = unmarshaler.Unmarshal(req.Body, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request json")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *CreateEntitlementPolicyResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.CreateEntitlementPolicy(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *CreateEntitlementPolicyResponse and nil error while calling CreateEntitlementPolicy. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	var buf bytes.Buffer
+	marshaler := &jsonpb.Marshaler{OrigName: true}
+	if err = marshaler.Marshal(&buf, respContent); err != nil {
+		err = wrapErr(err, "failed to marshal json response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	respBytes := buf.Bytes()
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveCreateEntitlementPolicyProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "CreateEntitlementPolicy")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = wrapErr(err, "failed to read request body")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+	reqContent := new(CreateEntitlementPolicyRequest)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request proto")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *CreateEntitlementPolicyResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.CreateEntitlementPolicy(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *CreateEntitlementPolicyResponse and nil error while calling CreateEntitlementPolicy. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		err = wrapErr(err, "failed to marshal proto response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveDeleteEntitlementPolicy(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveDeleteEntitlementPolicyJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveDeleteEntitlementPolicyProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *deviceRegistrationServer) serveDeleteEntitlementPolicyJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "DeleteEntitlementPolicy")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	reqContent := new(DeleteEntitlementPolicyRequest)
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	if err = unmarshaler.Unmarshal(req.Body, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request json")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *DeleteEntitlementPolicyResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.DeleteEntitlementPolicy(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *DeleteEntitlementPolicyResponse and nil error while calling DeleteEntitlementPolicy. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	var buf bytes.Buffer
+	marshaler := &jsonpb.Marshaler{OrigName: true}
+	if err = marshaler.Marshal(&buf, respContent); err != nil {
+		err = wrapErr(err, "failed to marshal json response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	respBytes := buf.Bytes()
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveDeleteEntitlementPolicyProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "DeleteEntitlementPolicy")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = wrapErr(err, "failed to read request body")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+	reqContent := new(DeleteEntitlementPolicyRequest)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request proto")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *DeleteEntitlementPolicyResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.DeleteEntitlementPolicy(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *DeleteEntitlementPolicyResponse and nil error while calling DeleteEntitlementPolicy. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		err = wrapErr(err, "failed to marshal proto response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveListEntitlementPolicies(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveListEntitlementPoliciesJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveListEntitlementPoliciesProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *deviceRegistrationServer) serveListEntitlementPoliciesJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "ListEntitlementPolicies")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	reqContent := new(ListEntitlementPoliciesRequest)
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	if err = unmarshaler.Unmarshal(req.Body, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request json")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *ListEntitlementPoliciesResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.ListEntitlementPolicies(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ListEntitlementPoliciesResponse and nil error while calling ListEntitlementPolicies. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	var buf bytes.Buffer
+	marshaler := &jsonpb.Marshaler{OrigName: true}
+	if err = marshaler.Marshal(&buf, respContent); err != nil {
+		err = wrapErr(err, "failed to marshal json response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	respBytes := buf.Bytes()
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveListEntitlementPoliciesProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "ListEntitlementPolicies")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = wrapErr(err, "failed to read request body")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+	reqContent := new(ListEntitlementPoliciesRequest)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request proto")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *ListEntitlementPoliciesResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.ListEntitlementPolicies(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ListEntitlementPoliciesResponse and nil error while calling ListEntitlementPolicies. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		err = wrapErr(err, "failed to marshal proto response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveApplyEntitlement(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveApplyEntitlementJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveApplyEntitlementProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *deviceRegistrationServer) serveApplyEntitlementJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "ApplyEntitlement")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	reqContent := new(EntitlementRequest)
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	if err = unmarshaler.Unmarshal(req.Body, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request json")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *ApplyEntitlementResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.ApplyEntitlement(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ApplyEntitlementResponse and nil error while calling ApplyEntitlement. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	var buf bytes.Buffer
+	marshaler := &jsonpb.Marshaler{OrigName: true}
+	if err = marshaler.Marshal(&buf, respContent); err != nil {
+		err = wrapErr(err, "failed to marshal json response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	respBytes := buf.Bytes()
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveApplyEntitlementProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "ApplyEntitlement")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = wrapErr(err, "failed to read request body")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+	reqContent := new(EntitlementRequest)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request proto")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *ApplyEntitlementResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.ApplyEntitlement(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *ApplyEntitlementResponse and nil error while calling ApplyEntitlement. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	respBytes, err := proto.Marshal(respContent)
+	if err != nil {
+		err = wrapErr(err, "failed to marshal proto response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/protobuf")
+	resp.WriteHeader(http.StatusOK)
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveRevokeEntitlement(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	header := req.Header.Get("Content-Type")
+	i := strings.Index(header, ";")
+	if i == -1 {
+		i = len(header)
+	}
+	switch strings.TrimSpace(strings.ToLower(header[:i])) {
+	case "application/json":
+		s.serveRevokeEntitlementJSON(ctx, resp, req)
+	case "application/protobuf":
+		s.serveRevokeEntitlementProtobuf(ctx, resp, req)
+	default:
+		msg := fmt.Sprintf("unexpected Content-Type: %q", req.Header.Get("Content-Type"))
+		twerr := badRouteError(msg, req.Method, req.URL.Path)
+		s.writeError(ctx, resp, twerr)
+	}
+}
+
+func (s *deviceRegistrationServer) serveRevokeEntitlementJSON(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "RevokeEntitlement")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	reqContent := new(EntitlementRequest)
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	if err = unmarshaler.Unmarshal(req.Body, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request json")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *RevokeEntitlementResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.RevokeEntitlement(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *RevokeEntitlementResponse and nil error while calling RevokeEntitlement. nil responses are not supported"))
+		return
+	}
+
+	ctx = callResponsePrepared(ctx, s.hooks)
+
+	var buf bytes.Buffer
+	marshaler := &jsonpb.Marshaler{OrigName: true}
+	if err = marshaler.Marshal(&buf, respContent); err != nil {
+		err = wrapErr(err, "failed to marshal json response")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	ctx = ctxsetters.WithStatusCode(ctx, http.StatusOK)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(http.StatusOK)
+
+	respBytes := buf.Bytes()
+	if n, err := resp.Write(respBytes); err != nil {
+		msg := fmt.Sprintf("failed to write response, %d of %d bytes written: %s", n, len(respBytes), err.Error())
+		twerr := twirp.NewError(twirp.Unknown, msg)
+		callError(ctx, s.hooks, twerr)
+	}
+	callResponseSent(ctx, s.hooks)
+}
+
+func (s *deviceRegistrationServer) serveRevokeEntitlementProtobuf(ctx context.Context, resp http.ResponseWriter, req *http.Request) {
+	var err error
+	ctx = ctxsetters.WithMethodName(ctx, "RevokeEntitlement")
+	ctx, err = callRequestRouted(ctx, s.hooks)
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = wrapErr(err, "failed to read request body")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+	reqContent := new(EntitlementRequest)
+	if err = proto.Unmarshal(buf, reqContent); err != nil {
+		err = wrapErr(err, "failed to parse request proto")
+		s.writeError(ctx, resp, twirp.InternalErrorWith(err))
+		return
+	}
+
+	// Call service method
+	var respContent *RevokeEntitlementResponse
+	func() {
+		defer func() {
+			// In case of a panic, serve a 500 error and then panic.
+			if r := recover(); r != nil {
+				s.writeError(ctx, resp, twirp.InternalError("Internal service panic"))
+				panic(r)
+			}
+		}()
+		respContent, err = s.RevokeEntitlement(ctx, reqContent)
+	}()
+
+	if err != nil {
+		s.writeError(ctx, resp, err)
+		return
+	}
+	if respContent == nil {
+		s.writeError(ctx, resp, twirp.InternalError("received a nil *RevokeEntitlementResponse and nil error while calling RevokeEntitlement. nil responses are not supported"))
 		return
 	}
 
@@ -927,30 +1800,56 @@ func callError(ctx context.Context, h *twirp.ServerHooks, err twirp.Error) conte
 }
 
 var twirpFileDescriptor0 = []byte{
-	// 396 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0x4f, 0xee, 0xd2, 0x40,
-	0x14, 0xc7, 0x1d, 0x50, 0x28, 0xaf, 0x08, 0xf8, 0x30, 0xa4, 0x36, 0xfe, 0xc1, 0x2e, 0x48, 0x75,
-	0xc1, 0x02, 0x6f, 0x80, 0xdd, 0x18, 0x88, 0x35, 0x0d, 0x6c, 0xdc, 0x60, 0xa1, 0x13, 0x32, 0x69,
-	0xed, 0xd4, 0x76, 0x4a, 0xc2, 0x39, 0x3c, 0x8a, 0xa7, 0xf2, 0x16, 0xa6, 0x33, 0xa5, 0x2d, 0x51,
-	0x88, 0xbf, 0xe5, 0xfb, 0xbe, 0xcf, 0xfb, 0x3f, 0x03, 0xc3, 0x80, 0x9e, 0xd8, 0x81, 0xa6, 0xf4,
-	0x38, 0x4f, 0x52, 0x2e, 0x38, 0xf6, 0x2a, 0xc1, 0xfa, 0xdd, 0x02, 0xfc, 0x18, 0xf9, 0xec, 0xbb,
-	0x23, 0x25, 0x8f, 0xfe, 0xc8, 0x69, 0x26, 0xf0, 0x2d, 0xf4, 0x15, 0xb3, 0x13, 0x3c, 0xa4, 0xb1,
-	0x41, 0xa6, 0xc4, 0xee, 0x79, 0xba, 0xd2, 0x36, 0x85, 0x84, 0x2f, 0x40, 0xcb, 0x33, 0x9a, 0xee,
-	0x72, 0x16, 0x18, 0x2d, 0xe9, 0xee, 0x16, 0xf6, 0x96, 0x05, 0xb8, 0x04, 0x2d, 0xe2, 0x07, 0x5f,
-	0x30, 0x1e, 0x1b, 0xed, 0x29, 0xb1, 0xf5, 0xc5, 0x6c, 0x5e, 0xf7, 0xf0, 0x77, 0xb9, 0xf9, 0xba,
-	0xa4, 0xbd, 0x2a, 0x0e, 0x57, 0xa0, 0x07, 0x2c, 0x4b, 0x78, 0xc6, 0x64, 0x9a, 0xc7, 0x53, 0x62,
-	0x0f, 0x16, 0xef, 0xee, 0xa7, 0x71, 0xea, 0x00, 0xaf, 0x19, 0x8d, 0x13, 0xe8, 0xec, 0x53, 0x1e,
-	0xd2, 0xd4, 0x78, 0x22, 0x3b, 0x2d, 0x2d, 0xd3, 0x01, 0xed, 0x52, 0x1a, 0x5f, 0x42, 0x2f, 0xe2,
-	0xf1, 0x91, 0x89, 0x3c, 0xa0, 0x72, 0x5e, 0xe2, 0xd5, 0x02, 0x9a, 0xa0, 0x45, 0xbe, 0x50, 0xce,
-	0x96, 0x74, 0x56, 0xb6, 0x35, 0x03, 0xbd, 0x51, 0x19, 0x01, 0x3a, 0x9f, 0x3e, 0x3b, 0xae, 0xeb,
-	0x8d, 0x1e, 0xa1, 0x0e, 0x5d, 0x77, 0xbb, 0x91, 0x06, 0xb1, 0x7e, 0x12, 0x18, 0x5f, 0x75, 0x9d,
-	0x25, 0x3c, 0xce, 0x28, 0xda, 0x30, 0x92, 0x9b, 0x4c, 0x52, 0x76, 0xf2, 0x05, 0xdd, 0x85, 0xf4,
-	0x5c, 0x2e, 0x7c, 0x50, 0xe8, 0x5f, 0x94, 0xbc, 0xa2, 0x67, 0x9c, 0xc1, 0x50, 0x91, 0xf9, 0x3e,
-	0x62, 0x07, 0x09, 0xaa, 0xd5, 0x3f, 0x95, 0xa0, 0x54, 0x0b, 0xee, 0x3d, 0x3c, 0x2b, 0xcf, 0xd7,
-	0x20, 0xdb, 0x92, 0x2c, 0x1f, 0x43, 0xc5, 0x5a, 0xdf, 0x60, 0xec, 0xd1, 0x13, 0x0f, 0xe9, 0x83,
-	0x5f, 0xc0, 0x7f, 0x76, 0x63, 0x4d, 0xe0, 0xf9, 0x75, 0x05, 0x35, 0xf7, 0xe2, 0x17, 0x01, 0xbc,
-	0x48, 0x47, 0x96, 0x89, 0x54, 0x1d, 0x62, 0x0d, 0x7a, 0x63, 0x4b, 0xf8, 0xea, 0xee, 0xcd, 0xcd,
-	0xd7, 0xb7, 0xdc, 0xe5, 0x72, 0x5d, 0xe8, 0x37, 0x8b, 0x63, 0x93, 0xff, 0xc7, 0xdc, 0xe6, 0x9b,
-	0x9b, 0x7e, 0x95, 0x70, 0xa9, 0x7f, 0xad, 0xbf, 0xcf, 0xbe, 0x23, 0x3f, 0xd4, 0x87, 0x3f, 0x01,
-	0x00, 0x00, 0xff, 0xff, 0x83, 0x06, 0x8d, 0x23, 0x63, 0x03, 0x00, 0x00,
+	// 803 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0xc1, 0x4e, 0xdb, 0x4a,
+	0x14, 0xc5, 0x0e, 0x84, 0xf8, 0x9a, 0x84, 0x30, 0x3c, 0xf1, 0x4c, 0x78, 0x24, 0xc1, 0xbc, 0x87,
+	0xf2, 0x50, 0x15, 0xa9, 0x54, 0xdd, 0x74, 0x17, 0x08, 0xa2, 0x51, 0x81, 0x20, 0x17, 0x50, 0x55,
+	0xa1, 0x46, 0x4e, 0x3c, 0x42, 0xa3, 0x18, 0xdb, 0xb5, 0x9d, 0xa8, 0xd9, 0x54, 0xfc, 0x43, 0x3f,
+	0xa7, 0x8b, 0xfe, 0x50, 0x77, 0xfd, 0x81, 0xca, 0x33, 0x63, 0xc7, 0x4e, 0xe2, 0x84, 0xaa, 0xea,
+	0x2e, 0x73, 0xe7, 0xcc, 0xb9, 0x67, 0xee, 0x3d, 0x77, 0x62, 0x58, 0x37, 0xf0, 0x90, 0xf4, 0xb0,
+	0x8b, 0xef, 0xeb, 0x8e, 0x6b, 0xfb, 0x36, 0x92, 0xa2, 0x80, 0xfa, 0x5d, 0x04, 0x74, 0x62, 0xea,
+	0xe4, 0xa1, 0x49, 0x43, 0x1a, 0xfe, 0x38, 0xc0, 0x9e, 0x8f, 0xf6, 0x60, 0x8d, 0x61, 0x3a, 0xbe,
+	0xdd, 0xc7, 0x96, 0x22, 0x54, 0x85, 0x9a, 0xa4, 0xc9, 0x2c, 0x76, 0x1d, 0x84, 0xd0, 0x36, 0xe4,
+	0x06, 0x1e, 0x76, 0x3b, 0x03, 0x62, 0x28, 0x22, 0xdd, 0x5e, 0x0d, 0xd6, 0x37, 0xc4, 0x40, 0xc7,
+	0x90, 0x33, 0xed, 0x9e, 0xee, 0x13, 0xdb, 0x52, 0x32, 0x55, 0xa1, 0x26, 0x1f, 0x1d, 0xd4, 0xc7,
+	0x1a, 0xa6, 0xd3, 0xd5, 0xcf, 0x39, 0x5a, 0x8b, 0xce, 0x05, 0x1c, 0xf8, 0x93, 0x63, 0x7b, 0x03,
+	0x17, 0x2b, 0xcb, 0x55, 0xa1, 0x56, 0x58, 0xc4, 0x71, 0xca, 0xd1, 0x5a, 0x74, 0x0e, 0xfd, 0x07,
+	0x85, 0xae, 0x6b, 0xf7, 0xb1, 0xdb, 0xd1, 0x0d, 0xc3, 0xc5, 0x9e, 0xa7, 0xac, 0x50, 0xa1, 0x79,
+	0x16, 0x6d, 0xb0, 0x60, 0xa9, 0x09, 0xb9, 0x50, 0x00, 0xfa, 0x07, 0x24, 0xd3, 0xb6, 0xee, 0x89,
+	0x3f, 0x30, 0x30, 0xbd, 0xb5, 0xa0, 0x8d, 0x03, 0xa8, 0x04, 0x39, 0x53, 0xf7, 0xd9, 0xa6, 0x48,
+	0x37, 0xa3, 0xb5, 0xba, 0x0f, 0xb9, 0x50, 0x02, 0x02, 0xc8, 0xb6, 0x2e, 0x9b, 0xed, 0xb6, 0x56,
+	0x5c, 0x42, 0x32, 0xac, 0xb6, 0x6f, 0xae, 0xe9, 0x42, 0x50, 0xbf, 0x08, 0xb0, 0x99, 0xd0, 0xee,
+	0x39, 0xb6, 0xe5, 0x61, 0x54, 0x83, 0x22, 0x2d, 0xa6, 0xe3, 0x92, 0xa1, 0xee, 0xe3, 0x4e, 0x1f,
+	0x8f, 0x78, 0xcd, 0x0b, 0x41, 0xfc, 0x8a, 0x85, 0xdf, 0xe0, 0x11, 0x3a, 0x80, 0x75, 0x86, 0x1c,
+	0x74, 0x4d, 0xd2, 0xa3, 0x40, 0x56, 0xfd, 0x3c, 0x05, 0xd2, 0x68, 0x80, 0x3b, 0x84, 0x0d, 0xde,
+	0xc1, 0x18, 0x32, 0x43, 0x91, 0xdc, 0x0f, 0x11, 0x56, 0xed, 0xc2, 0xa6, 0x86, 0x87, 0x76, 0x1f,
+	0xff, 0xb2, 0x09, 0x66, 0xe9, 0x16, 0x67, 0xe9, 0x56, 0xb7, 0xe0, 0xaf, 0x64, 0x0e, 0x76, 0x73,
+	0xf5, 0x9b, 0x00, 0xf2, 0xa9, 0xe5, 0x13, 0xdf, 0xc4, 0x0f, 0xd8, 0xf2, 0xd1, 0x0e, 0x48, 0x1e,
+	0xb6, 0x3c, 0xdb, 0xed, 0x10, 0x83, 0x66, 0xcc, 0x6b, 0x39, 0x16, 0x68, 0x19, 0xe8, 0x25, 0x64,
+	0xf5, 0x1e, 0xb5, 0x95, 0x48, 0x2d, 0xb1, 0x1b, 0xb3, 0x44, 0x8c, 0xa4, 0xde, 0xa0, 0x20, 0x8d,
+	0x83, 0x11, 0x82, 0xe5, 0x2e, 0xb1, 0x3c, 0x25, 0x53, 0xcd, 0xd4, 0x04, 0x8d, 0xfe, 0x0e, 0x5a,
+	0x49, 0x2c, 0x1f, 0xbb, 0x43, 0xdd, 0xa4, 0xfe, 0xca, 0x6b, 0xd1, 0x5a, 0x7d, 0x06, 0x59, 0xc6,
+	0x80, 0x24, 0x58, 0x79, 0xfb, 0xba, 0xa1, 0x9d, 0x16, 0x97, 0xd0, 0x2a, 0x64, 0x8e, 0x5b, 0x97,
+	0x45, 0x01, 0x15, 0x00, 0x2e, 0xda, 0xb7, 0xad, 0xcb, 0xb3, 0x4e, 0xe3, 0xf6, 0xac, 0x28, 0xaa,
+	0x77, 0x50, 0x3e, 0x71, 0xb1, 0xee, 0xe3, 0x98, 0x82, 0x2b, 0xdb, 0x24, 0xbd, 0x51, 0x58, 0xc8,
+	0x57, 0xb0, 0x86, 0xc7, 0x7b, 0x9e, 0x22, 0x54, 0x33, 0x35, 0xf9, 0x68, 0x6b, 0xb6, 0x78, 0x2d,
+	0x81, 0x55, 0x3f, 0x43, 0x25, 0x95, 0x9d, 0x9b, 0x67, 0x07, 0x24, 0x87, 0x46, 0xc2, 0x92, 0x49,
+	0x5a, 0x8e, 0x05, 0x5a, 0x06, 0xaa, 0x80, 0x3c, 0xdd, 0x1c, 0x70, 0xc6, 0x86, 0xda, 0x05, 0x98,
+	0x72, 0x88, 0xe4, 0x44, 0xde, 0xf8, 0x00, 0xe5, 0x26, 0x36, 0xf1, 0x9c, 0xdb, 0xfd, 0x56, 0x7a,
+	0x75, 0x0f, 0x2a, 0xa9, 0xfc, 0xdc, 0x22, 0x55, 0x28, 0x9f, 0x13, 0xcf, 0x9f, 0x04, 0x10, 0xec,
+	0x71, 0x09, 0xea, 0x0f, 0x01, 0x2a, 0xa9, 0x10, 0x5e, 0xa5, 0x0b, 0x60, 0xaa, 0x08, 0x0e, 0x1b,
+	0xf0, 0x3c, 0xd6, 0x80, 0x05, 0xa7, 0xeb, 0x5c, 0x52, 0x44, 0x51, 0x7a, 0x14, 0x20, 0xcb, 0x82,
+	0xf3, 0x0b, 0x30, 0xd9, 0x7b, 0xf1, 0xe9, 0xbd, 0x5f, 0xd4, 0x9a, 0x47, 0x01, 0x50, 0xfc, 0xf0,
+	0x1f, 0x18, 0x5b, 0x2a, 0x21, 0xbc, 0x1b, 0x1b, 0xa0, 0x40, 0x02, 0xbf, 0x9c, 0xa7, 0xde, 0x81,
+	0xd2, 0x70, 0x1c, 0x73, 0x94, 0x90, 0xc1, 0x0b, 0xfe, 0x04, 0x1d, 0x49, 0x76, 0x71, 0x92, 0x7d,
+	0x07, 0xb6, 0xd9, 0x9b, 0x31, 0x83, 0xfe, 0xe8, 0xeb, 0x0a, 0xa0, 0xf0, 0x2d, 0xb9, 0x27, 0x9e,
+	0xef, 0xb2, 0x07, 0xfc, 0x1c, 0xe4, 0xd8, 0x03, 0x8b, 0x76, 0xe7, 0xfe, 0x69, 0x94, 0xca, 0x69,
+	0xdb, 0xfc, 0x0e, 0x6d, 0x58, 0x8b, 0xbf, 0x5a, 0x28, 0x8e, 0x9f, 0xf1, 0x64, 0x96, 0x2a, 0xa9,
+	0xfb, 0x9c, 0xd0, 0x81, 0xbf, 0x53, 0xc6, 0x19, 0xfd, 0x1f, 0xd7, 0x32, 0xf7, 0x41, 0x29, 0x1d,
+	0x3e, 0x05, 0x3a, 0xce, 0x98, 0x32, 0x60, 0x89, 0x8c, 0xf3, 0x87, 0x3c, 0x91, 0x71, 0xc1, 0xbc,
+	0x06, 0x19, 0x53, 0xc6, 0x29, 0x91, 0x71, 0xfe, 0x4c, 0x27, 0x32, 0x2e, 0x9a, 0xed, 0x5b, 0x28,
+	0x4e, 0xda, 0x10, 0xa5, 0xfc, 0x37, 0x84, 0xf4, 0xfb, 0xb1, 0xed, 0x54, 0x0b, 0xbf, 0x83, 0x8d,
+	0x29, 0x03, 0x2e, 0x22, 0xfe, 0x77, 0xca, 0x02, 0x33, 0x98, 0x8f, 0xe5, 0xf7, 0xe3, 0x8f, 0xb0,
+	0x6e, 0x96, 0x7e, 0x96, 0xbd, 0xf8, 0x19, 0x00, 0x00, 0xff, 0xff, 0xa0, 0x0a, 0x1a, 0x8a, 0xa9,
+	0x09, 0x00, 0x00,
 }
